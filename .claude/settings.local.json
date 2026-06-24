@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "PowerShell(New-Item -ItemType Directory -Force C:\\\\AI\\\\pomodoro)",
+      "PowerShell(New-Item -ItemType Directory -Force C:\\\\AI\\\\pixel-painter)",
+      "Bash(gh auth *)",
+      "PowerShell(gh auth status 2>&1)",
+      "PowerShell(git -C C:\\\\AI\\\\pixel-painter status 2>&1)",
+      "PowerShell(git -C C:\\\\AI\\\\pomodoro status 2>&1)"
+    ]
+  }
+}

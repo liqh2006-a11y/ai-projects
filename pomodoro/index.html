@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>番茄钟</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    display: flex;
+    gap: 24px;
+    padding: 32px;
+  }
+  .left { flex: 0 0 320px; display: flex; flex-direction: column; gap: 20px; }
+  .right { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+
+  .card {
+    background: #16213e;
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  /* 计时器 */
+  .mode-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .mode-btn {
+    flex: 1; padding: 8px; border: none; border-radius: 8px;
+    cursor: pointer; font-size: 13px; font-weight: 600;
+    background: #0f3460; color: #aaa; transition: all .2s;
+  }
+  .mode-btn.active { background: #e94560; color: #fff; }
+
+  .timer-display {
+    text-align: center;
+    font-size: 80px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    margin: 8px 0 20px;
+  }
+  .timer-display.urgent { color: #e94560; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.6 } }
+
+  .progress-ring { display: flex; justify-content: center; margin-bottom: 16px; }
+  .ring { transform: rotate(-90deg); }
+  .ring-bg { fill: none; stroke: #0f3460; stroke-width: 8; }
+  .ring-bar { fill: none; stroke: #e94560; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset .5s; }
+
+  .timer-controls { display: flex; gap: 10px; }
+  .btn {
+    flex: 1; padding: 12px; border: none; border-radius: 10px;
+    cursor: pointer; font-size: 15px; font-weight: 700;
+    transition: transform .1s, opacity .2s;
+  }
+  .btn:active { transform: scale(.96); }
+  .btn-primary { background: #e94560; color: #fff; }
+  .btn-secondary { background: #0f3460; color: #aaa; }
+  .btn:hover { opacity: .9; }
+
+  .session-count { text-align: center; font-size: 13px; color: #888; margin-top: 14px; }
+  .tomatoes span { font-size: 18px; }
+
+  /* 任务 */
+  h2 { font-size: 16px; font-weight: 700; margin-bottom: 14px; color: #ccc; }
+  .task-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .task-input {
+    flex: 1; background: #0f3460; border: none; border-radius: 8px;
+    padding: 10px 14px; color: #eee; font-size: 14px; outline: none;
+  }
+  .task-input::placeholder { color: #555; }
+  .add-btn {
+    background: #e94560; color: #fff; border: none;
+    border-radius: 8px; padding: 10px 16px; cursor: pointer;
+    font-size: 18px; font-weight: 700;
+  }
+
+  .task-list { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
+  .task-item {
+    display: flex; align-items: center; gap: 10px;
+    background: #0f3460; border-radius: 10px; padding: 10px 14px;
+    cursor: pointer; border: 2px solid transparent; transition: all .2s;
+  }
+  .task-item.selected { border-color: #e94560; }
+  .task-item.done { opacity: .45; }
+  .task-item.done .task-name { text-decoration: line-through; }
+  .task-check {
+    width: 20px; height: 20px; border-radius: 50%; border: 2px solid #555;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .task-item.done .task-check { background: #4caf50; border-color: #4caf50; }
+  .task-name { flex: 1; font-size: 14px; }
+  .task-tomatoes { font-size: 12px; color: #e94560; }
+  .del-btn { background: none; border: none; color: #555; cursor: pointer; font-size: 16px; padding: 0 4px; }
+  .del-btn:hover { color: #e94560; }
+
+  /* 统计 */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-box { background: #0f3460; border-radius: 10px; padding: 14px; text-align: center; }
+  .stat-num { font-size: 28px; font-weight: 700; color: #e94560; }
+  .stat-label { font-size: 12px; color: #888; margin-top: 4px; }
+
+  /* 通知横幅 */
+  .banner {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: #e94560; color: #fff; padding: 12px 28px;
+    border-radius: 50px; font-weight: 700; font-size: 15px;
+    box-shadow: 0 4px 20px #0008; opacity: 0; pointer-events: none;
+    transition: opacity .3s;
+  }
+  .banner.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="left">
+  <!-- 计时器卡片 -->
+  <div class="card">
+    <div class="mode-tabs">
+      <button class="mode-btn active" onclick="setMode('work')">专注 25'</button>
+      <button class="mode-btn" onclick="setMode('short')">短休 5'</button>
+      <button class="mode-btn" onclick="setMode('long')">长休 15'</button>
+    </div>
+
+    <div class="progress-ring">
+      <svg width="160" height="160" class="ring">
+        <circle class="ring-bg" cx="80" cy="80" r="68"/>
+        <circle class="ring-bar" id="ringBar" cx="80" cy="80" r="68"
+          stroke-dasharray="427" stroke-dashoffset="0"/>
+      </svg>
+    </div>
+
+    <div class="timer-display" id="display">25:00</div>
+
+    <div class="timer-controls">
+      <button class="btn btn-primary" id="startBtn" onclick="toggleTimer()">开始</button>
+      <button class="btn btn-secondary" onclick="resetTimer()">重置</button>
+    </div>
+
+    <div class="session-count">
+      本轮进度：<span id="tomatoIcons"></span>
+    </div>
+  </div>
+
+  <!-- 统计卡片 -->
+  <div class="card">
+    <h2>今日统计</h2>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-num" id="statPomodoros">0</div>
+        <div class="stat-label">完成番茄</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statMinutes">0</div>
+        <div class="stat-label">专注分钟</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statTasks">0</div>
+        <div class="stat-label">完成任务</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statStreak">0</div>
+        <div class="stat-label">连续番茄</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="right">
+  <!-- 任务卡片 -->
+  <div class="card" style="flex:1">
+    <h2>任务列表</h2>
+    <div class="task-input-row">
+      <input class="task-input" id="taskInput" placeholder="添加新任务…" onkeydown="if(event.key==='Enter')addTask()">
+      <button class="add-btn" onclick="addTask()">+</button>
+    </div>
+    <div class="task-list" id="taskList"></div>
+  </div>
+</div>
+
+<div class="banner" id="banner"></div>
+
+<script>
+const MODES = { work: 25*60, short: 5*60, long: 15*60 };
+let mode = 'work';
+let total = MODES.work;
+let remaining = total;
+let running = false;
+let interval = null;
+let tasks = JSON.parse(localStorage.getItem('pt_tasks') || '[]');
+let selectedTask = null;
+let stats = JSON.parse(localStorage.getItem('pt_stats') || '{"pomodoros":0,"minutes":0,"tasks":0,"streak":0}');
+const CIRC = 2 * Math.PI * 68;
+
+function setMode(m) {
+  if (running) return;
+  mode = m;
+  total = MODES[m];
+  remaining = total;
+  document.querySelectorAll('.mode-btn').forEach((b,i) => b.classList.toggle('active', ['work','short','long'][i]===m));
+  updateDisplay();
+}
+
+function updateDisplay() {
+  const m = String(Math.floor(remaining/60)).padStart(2,'0');
+  const s = String(remaining%60).padStart(2,'0');
+  document.getElementById('display').textContent = `${m}:${s}`;
+  document.getElementById('display').classList.toggle('urgent', remaining <= 60 && mode==='work');
+  const pct = remaining / total;
+  document.getElementById('ringBar').style.strokeDashoffset = CIRC * pct;
+}
+
+function toggleTimer() {
+  if (running) {
+    clearInterval(interval);
+    running = false;
+    document.getElementById('startBtn').textContent = '继续';
+  } else {
+    running = true;
+    document.getElementById('startBtn').textContent = '暂停';
+    interval = setInterval(tick, 1000);
+  }
+}
+
+function tick() {
+  remaining--;
+  updateDisplay();
+  if (remaining <= 0) {
+    clearInterval(interval);
+    running = false;
+    document.getElementById('startBtn').textContent = '开始';
+    onComplete();
+  }
+}
+
+function onComplete() {
+  if (mode === 'work') {
+    stats.pomodoros++;
+    stats.minutes += 25;
+    stats.streak++;
+    if (selectedTask !== null) {
+      tasks[selectedTask].tomatoes = (tasks[selectedTask].tomatoes||0) + 1;
+      saveTasks();
+    }
+    showBanner('🍅 专注完成！好好休息一下吧');
+    try { new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAA==').play(); } catch(e){}
+  } else {
+    stats.streak = 0;
+    showBanner('⚡ 休息结束，继续专注！');
+  }
+  saveStats();
+  renderStats();
+  renderTomatoes();
+  remaining = total;
+  updateDisplay();
+}
+
+function resetTimer() {
+  clearInterval(interval);
+  running = false;
+  remaining = total;
+  document.getElementById('startBtn').textContent = '开始';
+  updateDisplay();
+}
+
+function showBanner(msg) {
+  const b = document.getElementById('banner');
+  b.textContent = msg;
+  b.classList.add('show');
+  setTimeout(() => b.classList.remove('show'), 3000);
+}
+
+function renderTomatoes() {
+  const n = stats.pomodoros % 4;
+  document.getElementById('tomatoIcons').innerHTML =
+    '🍅'.repeat(n) + '⬜'.repeat(4-n);
+}
+
+function renderStats() {
+  document.getElementById('statPomodoros').textContent = stats.pomodoros;
+  document.getElementById('statMinutes').textContent = stats.minutes;
+  document.getElementById('statTasks').textContent = stats.tasks;
+  document.getElementById('statStreak').textContent = stats.streak;
+}
+
+function saveStats() { localStorage.setItem('pt_stats', JSON.stringify(stats)); }
+function saveTasks() { localStorage.setItem('pt_tasks', JSON.stringify(tasks)); }
+
+function addTask() {
+  const inp = document.getElementById('taskInput');
+  const name = inp.value.trim();
+  if (!name) return;
+  tasks.push({ name, done: false, tomatoes: 0 });
+  inp.value = '';
+  saveTasks();
+  renderTasks();
+}
+
+function toggleDone(i) {
+  tasks[i].done = !tasks[i].done;
+  if (tasks[i].done) stats.tasks++;
+  else if (stats.tasks > 0) stats.tasks--;
+  saveStats(); renderStats(); saveTasks(); renderTasks();
+}
+
+function deleteTask(i) {
+  tasks.splice(i, 1);
+  if (selectedTask === i) selectedTask = null;
+  else if (selectedTask > i) selectedTask--;
+  saveTasks(); renderTasks();
+}
+
+function selectTask(i) {
+  selectedTask = selectedTask === i ? null : i;
+  renderTasks();
+}
+
+function renderTasks() {
+  const list = document.getElementById('taskList');
+  if (tasks.length === 0) {
+    list.innerHTML = '<div style="color:#555;text-align:center;padding:20px">还没有任务，添加一个吧！</div>';
+    return;
+  }
+  list.innerHTML = tasks.map((t, i) => `
+    <div class="task-item ${t.done?'done':''} ${selectedTask===i?'selected':''}" onclick="selectTask(${i})">
+      <div class="task-check" onclick="event.stopPropagation();toggleDone(${i})">${t.done?'✓':''}</div>
+      <span class="task-name">${escHtml(t.name)}</span>
+      <span class="task-tomatoes">${'🍅'.repeat(t.tomatoes||0)}</span>
+      <button class="del-btn" onclick="event.stopPropagation();deleteTask(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// 初始化
+updateDisplay();
+renderTasks();
+renderStats();
+renderTomatoes();
+</script>
+</body>
+</html>
